@@ -16,6 +16,8 @@ interface CameraPreviewRef {
 const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
   function CameraPreview({ onCapture, isScanning }, ref) {
     const webcamRef = useRef<Webcam>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
     const [isCameraReady, setIsCameraReady] = useState(false);
     const [isInitializing, setIsInitializing] = useState(true);
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -24,6 +26,30 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [permissionDenied, setPermissionDenied] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
+
+    // Mengukur dimensi container untuk memastikan kamera proporsional
+    useEffect(() => {
+      if (!containerRef.current) return;
+      
+      const updateDimensions = () => {
+        if (containerRef.current) {
+          const { width, height } = containerRef.current.getBoundingClientRect();
+          setContainerDimensions({ width, height });
+        }
+      };
+      
+      updateDimensions();
+      
+      const resizeObserver = new ResizeObserver(updateDimensions);
+      resizeObserver.observe(containerRef.current);
+      
+      return () => {
+        if (containerRef.current) {
+          resizeObserver.unobserve(containerRef.current);
+        }
+        resizeObserver.disconnect();
+      };
+    }, []);
 
     // Inisialisasi kamera dan permintaan izin
     useEffect(() => {
@@ -226,18 +252,25 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
       }
     };
 
-    const videoConstraints = selectedDeviceId 
-      ? {
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-          deviceId: { exact: selectedDeviceId },
-          facingMode: "user"
-        }
-      : {
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-          facingMode: "user"
+    // Hitung aspek rasio yang optimal berdasarkan dimensi container
+    const getVideoConstraints = () => {
+      // Default constraints
+      const constraints = {
+        width: { ideal: 1280, min: 640 },
+        height: { ideal: 720, min: 480 },
+        facingMode: "user"
+      };
+      
+      // Tambahkan deviceId jika ada
+      if (selectedDeviceId) {
+        return {
+          ...constraints,
+          deviceId: { exact: selectedDeviceId }
         };
+      }
+      
+      return constraints;
+    };
 
     return (
       <div className="rounded-lg overflow-hidden bg-slate-800 border border-slate-700">
@@ -248,7 +281,11 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           </div>
         </div>
         
-        <div className="camera-container relative" style={{ height: '400px' }}>
+        <div 
+          ref={containerRef}
+          className="camera-container relative aspect-video w-full"
+          style={{ maxHeight: "calc(100vh - 300px)" }}
+        >
           {permissionDenied ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 p-6">
               <ShieldExclamationIcon className="h-16 w-16 text-red-500 mb-4" />
@@ -292,19 +329,21 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
               </div>
             </div>
           ) : (
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={videoConstraints}
-              onUserMedia={handleUserMedia}
-              onUserMediaError={handleUserMediaError}
-              mirrored={isMirror}
-              className="w-full h-full object-cover"
-              forceScreenshotSourceSize
-              imageSmoothing
-              screenshotQuality={0.95}
-            />
+            <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-black">
+              <Webcam
+                audio={false}
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                videoConstraints={getVideoConstraints()}
+                onUserMedia={handleUserMedia}
+                onUserMediaError={handleUserMediaError}
+                mirrored={isMirror}
+                className="w-full h-full object-cover"
+                forceScreenshotSourceSize
+                imageSmoothing
+                screenshotQuality={0.95}
+              />
+            </div>
           )}
           
           {isScanning && (

@@ -9,6 +9,7 @@ import { recognizeText, terminateOCR } from './services/ocrService';
 import { analyzeText } from './services/threatAnalysisService';
 import { preprocessImageForOCR } from './utils/imageProcessing';
 import { AnalysisResult } from './components/ThreatAnalysis';
+import { APP_CONFIG } from './config';
 
 // Import komponen dengan dynamic import untuk menghindari masalah SSR
 const CameraPreview = dynamic(() => import('./components/CameraPreview'), {
@@ -103,9 +104,13 @@ export default function Home() {
       let ocrSuccess = false;
       let ocrError = null;
       
-      for (let attempt = 1; attempt <= APP_CONFIG.retryAttempts; attempt++) {
+      // Definisikan retry attempts jika APP_CONFIG tidak tersedia
+      const retryAttempts = APP_CONFIG?.retryAttempts || 3;
+      const retryDelay = APP_CONFIG?.retryDelay || 1000;
+      
+      for (let attempt = 1; attempt <= retryAttempts; attempt++) {
         try {
-          console.log(`OCR attempt ${attempt}/${APP_CONFIG.retryAttempts}`);
+          console.log(`OCR attempt ${attempt}/${retryAttempts}`);
           extractedText = await recognizeText(processedImage);
           
           if (extractedText && extractedText.trim().length > 0) {
@@ -113,16 +118,16 @@ export default function Home() {
             break;
           } else {
             console.warn(`OCR attempt ${attempt} returned empty text`);
-            if (attempt < APP_CONFIG.retryAttempts) {
-              await new Promise(resolve => setTimeout(resolve, APP_CONFIG.retryDelay));
+            if (attempt < retryAttempts) {
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
             }
           }
         } catch (error) {
           console.error(`OCR attempt ${attempt} failed:`, error);
           ocrError = error;
           
-          if (attempt < APP_CONFIG.retryAttempts) {
-            await new Promise(resolve => setTimeout(resolve, APP_CONFIG.retryDelay));
+          if (attempt < retryAttempts) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
           }
         }
       }
