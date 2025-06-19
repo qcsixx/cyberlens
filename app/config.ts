@@ -9,7 +9,7 @@ export const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 // Tesseract OCR configuration
 export const TESSERACT_CONFIG = {
   // Bahasa yang didukung
-  languages: ['eng', 'ind'],
+  languages: ['eng'],
   
   // Parameter untuk meningkatkan akurasi OCR
   parameters: {
@@ -26,25 +26,25 @@ export const TESSERACT_CONFIG = {
   
   // Timeouts
   timeouts: {
-    initialization: 60000, // 60 seconds
-    recognition: 30000,    // 30 seconds
+    initialization: 30000, // 30 seconds
+    recognition: 15000,    // 15 seconds
   }
 };
 
 // Image processing configuration
 export const IMAGE_PROCESSING_CONFIG = {
-  maxWidth: 1280,
-  maxHeight: 720,
-  jpegQuality: 0.95,
+  maxWidth: 1024,
+  maxHeight: 768,
+  jpegQuality: 0.9,
   contrastThreshold: 120, // 0-255, higher means more black/white contrast
-  processingMode: 'adaptive', // 'text-enhance', 'binarize', 'adaptive', 'default'
+  processingMode: 'binarize', // 'text-enhance', 'binarize', 'adaptive', 'default'
 };
 
 // Application configuration
 export const APP_CONFIG = {
   historyStorageKey: 'cyberlens_history',
   notificationDuration: 5000, // 5 seconds
-  retryAttempts: 3,           // Number of retry attempts for OCR
+  retryAttempts: 2,           // Number of retry attempts for OCR
   retryDelay: 1000,           // Delay between retry attempts in ms
 };
 

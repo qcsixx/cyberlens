@@ -44,10 +44,6 @@ export async function preprocessImageForOCR(imageDataUrl: string): Promise<strin
             }
           }
           
-          // Pastikan ukuran minimum untuk OCR yang lebih baik
-          width = Math.max(width, 800);
-          height = Math.max(height, 600);
-          
           canvas.width = width;
           canvas.height = height;
           
@@ -60,8 +56,20 @@ export async function preprocessImageForOCR(imageDataUrl: string): Promise<strin
           const imageData = ctx.getImageData(0, 0, width, height);
           const data = imageData.data;
           
-          // Menerapkan beberapa teknik pemrosesan gambar
-          applyImageProcessing(data, width, height, IMAGE_PROCESSING_CONFIG.processingMode);
+          // Binarisasi sederhana untuk meningkatkan kinerja OCR
+          const threshold = IMAGE_PROCESSING_CONFIG.contrastThreshold;
+          for (let i = 0; i < data.length; i += 4) {
+            // Konversi ke grayscale
+            const avg = (data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11);
+            
+            // Binarisasi dengan threshold
+            const newValue = avg > threshold ? 255 : 0;
+            
+            // Terapkan nilai baru
+            data[i] = newValue;     // R
+            data[i + 1] = newValue; // G
+            data[i + 2] = newValue; // B
+          }
           
           // Terapkan perubahan ke canvas
           ctx.putImageData(imageData, 0, 0);

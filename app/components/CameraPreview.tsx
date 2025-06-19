@@ -283,8 +283,8 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         
         <div 
           ref={containerRef}
-          className="camera-container relative aspect-video w-full"
-          style={{ maxHeight: "calc(100vh - 300px)" }}
+          className="camera-container relative w-full"
+          style={{ height: "400px" }}
         >
           {permissionDenied ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 p-6">
@@ -338,7 +338,7 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
                 onUserMedia={handleUserMedia}
                 onUserMediaError={handleUserMediaError}
                 mirrored={isMirror}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 forceScreenshotSourceSize
                 imageSmoothing
                 screenshotQuality={0.95}

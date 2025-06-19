@@ -1,8 +1,17 @@
-import { createWorker, createScheduler, PSM } from 'tesseract.js';
+import { createWorker } from 'tesseract.js';
 import { TESSERACT_CONFIG } from '../config';
 
-let worker: Tesseract.Worker | null = null;
-let scheduler: any = null;
+// Definisikan tipe untuk worker Tesseract
+interface WorkerWithState extends Tesseract.Worker {
+  isLoaded?: boolean;
+}
+
+// Enum PSM dari definisi tesseract.js
+enum PSM {
+  SINGLE_BLOCK = '6'
+}
+
+let worker: WorkerWithState | null = null;
 let isInitializing = false;
 let initPromise: Promise<any> | null = null;
 
@@ -20,29 +29,13 @@ export async function initializeOCR() {
   // Buat promise dengan timeout
   initPromise = new Promise(async (resolve, reject) => {
     try {
-      const timeoutId = setTimeout(() => {
-        console.error('OCR initialization timeout');
-        reject(new Error('Timeout initializing OCR engine'));
-      }, TESSERACT_CONFIG.timeouts.initialization);
-      
       console.log('Initializing OCR engine...');
       
-      // Gunakan scheduler untuk performa yang lebih baik
-      scheduler = createScheduler();
-      const newWorker = await createWorker({
-        logger: progress => {
-          if (progress.status === 'recognizing text') {
-            console.log(`OCR progress: ${Math.floor(progress.progress * 100)}%`);
-          } else {
-            console.log(`OCR status: ${progress.status}`);
-          }
-        },
-        errorHandler: err => {
-          console.error('OCR worker error:', err);
-        },
-        langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-        cachePath: '/tmp/tesseract-cache'
-      });
+      // Gunakan opsi yang lebih sederhana untuk meningkatkan kecepatan
+      const newWorker = await createWorker() as WorkerWithState;
+      
+      // Konfigurasi worker
+      console.log('Configuring OCR worker...');
       
       // Gabungkan bahasa untuk dukungan multi-bahasa
       const languages = TESSERACT_CONFIG.languages.join('+');
@@ -52,14 +45,20 @@ export async function initializeOCR() {
       
       // Konfigurasi tambahan untuk meningkatkan akurasi OCR
       await newWorker.setParameters({
-        ...TESSERACT_CONFIG.parameters,
+        tessedit_ocr_engine_mode: '1', // LSTM only
         tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+        preserve_interword_spaces: '1',
+        tessjs_create_hocr: '0',
+        tessjs_create_tsv: '0',
+        tessjs_create_box: '0',
+        tessjs_create_unlv: '0',
+        tessjs_create_osd: '0',
+        tessedit_char_whitelist: TESSERACT_CONFIG.parameters.tessedit_char_whitelist
       });
       
-      scheduler.addWorker(newWorker);
       worker = newWorker;
+      worker.isLoaded = true;
       
-      clearTimeout(timeoutId);
       isInitializing = false;
       console.log('OCR engine initialized successfully');
       resolve(worker);
@@ -89,41 +88,45 @@ export async function recognizeText(imageData: string): Promise<string> {
   try {
     console.log('Starting OCR process...');
     
-    // Buat promise dengan timeout
-    const recognizePromise = new Promise<string>(async (resolve, reject) => {
-      try {
-        const timeoutId = setTimeout(() => {
-          console.error('OCR recognition timeout');
-          reject(new Error('Timeout during text recognition'));
-        }, TESSERACT_CONFIG.timeouts.recognition);
-        
-        // Initialize OCR if not already done
-        const ocrWorker = await initializeOCR();
-        
-        if (!ocrWorker) {
-          throw new Error('OCR worker tidak tersedia');
-        }
-        
-        console.log('Recognizing text from image...');
-        const result = await ocrWorker.recognize(imageData);
-        console.log('OCR completed successfully');
-        
-        clearTimeout(timeoutId);
-        
-        if (!result.data.text || result.data.text.trim().length === 0) {
-          console.warn('No text detected in image');
-          reject(new Error('Tidak ada teks yang terdeteksi dalam gambar'));
-        } else {
-          console.log('Text detected:', result.data.text.substring(0, 100) + '...');
-          resolve(result.data.text);
-        }
-      } catch (error) {
-        console.error('OCR recognition error:', error);
-        reject(error);
-      }
-    });
+    // Coba inisialisasi OCR
+    let ocrWorker: WorkerWithState | null = null;
+    try {
+      ocrWorker = await initializeOCR();
+    } catch (initError) {
+      console.error('Failed to initialize OCR, trying with simpler options:', initError);
+      
+      // Jika gagal, coba dengan opsi yang lebih sederhana
+      worker = null;
+      initPromise = null;
+      
+      ocrWorker = await createWorker() as WorkerWithState;
+      
+      // Konfigurasi sederhana
+      await ocrWorker.loadLanguage('eng');
+      await ocrWorker.initialize('eng');
+      
+      // Gunakan parameter minimal
+      await ocrWorker.setParameters({
+        tessedit_ocr_engine_mode: '1',
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK
+      });
+    }
     
-    return await recognizePromise;
+    if (!ocrWorker) {
+      throw new Error('OCR worker tidak tersedia');
+    }
+    
+    console.log('Recognizing text from image...');
+    const result = await ocrWorker.recognize(imageData);
+    console.log('OCR completed successfully');
+    
+    if (!result.data.text || result.data.text.trim().length === 0) {
+      console.warn('No text detected in image');
+      throw new Error('Tidak ada teks yang terdeteksi dalam gambar');
+    } else {
+      console.log('Text detected:', result.data.text.substring(0, 100) + '...');
+      return result.data.text;
+    }
   } catch (error) {
     console.error('OCR error:', error);
     
@@ -139,15 +142,6 @@ export async function recognizeText(imageData: string): Promise<string> {
 }
 
 export async function terminateOCR() {
-  if (scheduler) {
-    try {
-      await scheduler.terminate();
-      scheduler = null;
-    } catch (error) {
-      console.error('Error terminating OCR scheduler:', error);
-    }
-  }
-  
   if (worker) {
     try {
       await worker.terminate();
