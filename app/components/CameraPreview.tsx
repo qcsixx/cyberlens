@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import Webcam from 'react-webcam';
-import { CameraIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { CameraIcon, ArrowPathIcon, ShieldExclamationIcon } from '@heroicons/react/24/outline';
 
 interface CameraPreviewProps {
   onCapture: (imageSrc: string) => void;
@@ -17,39 +17,97 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
   function CameraPreview({ onCapture, isScanning }, ref) {
     const webcamRef = useRef<Webcam>(null);
     const [isCameraReady, setIsCameraReady] = useState(false);
+    const [isInitializing, setIsInitializing] = useState(true);
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
     const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
     const [isMirror, setIsMirror] = useState(true);
     const [cameraError, setCameraError] = useState<string | null>(null);
+    const [permissionDenied, setPermissionDenied] = useState(false);
 
+    // Inisialisasi kamera dan permintaan izin
     useEffect(() => {
-      // Mendapatkan daftar perangkat kamera
-      const getDevices = async () => {
+      let mounted = true;
+
+      const initializeCamera = async () => {
+        setIsInitializing(true);
         try {
+          // Cek apakah browser mendukung getUserMedia
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Browser Anda tidak mendukung akses kamera. Gunakan browser modern seperti Chrome, Firefox, atau Edge.');
+          }
+
+          // Minta izin kamera terlebih dahulu
+          await navigator.mediaDevices.getUserMedia({ video: true });
+          
+          // Dapatkan daftar perangkat kamera
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoDevices = devices.filter(device => device.kind === 'videoinput');
-          setDevices(videoDevices);
           
-          if (videoDevices.length > 0) {
+          if (mounted) {
+            if (videoDevices.length === 0) {
+              throw new Error('Tidak ada kamera yang terdeteksi pada perangkat Anda.');
+            }
+            
+            setDevices(videoDevices);
             setSelectedDeviceId(videoDevices[0].deviceId);
+            setPermissionDenied(false);
           }
         } catch (error) {
-          console.error('Error accessing media devices:', error);
-          setCameraError('Tidak dapat mengakses perangkat kamera');
+          console.error('Error initializing camera:', error);
+          if (mounted) {
+            if (error instanceof DOMException && error.name === 'NotAllowedError') {
+              setPermissionDenied(true);
+              setCameraError('Izin kamera ditolak. Silakan berikan izin kamera melalui pengaturan browser Anda.');
+            } else {
+              setCameraError(`Gagal mengakses kamera: ${error instanceof Error ? error.message : 'Error tidak diketahui'}`);
+            }
+          }
+        } finally {
+          if (mounted) {
+            setIsInitializing(false);
+          }
         }
       };
 
-      getDevices();
+      initializeCamera();
+
+      return () => {
+        mounted = false;
+        // Hentikan stream kamera saat komponen unmount
+        if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.srcObject) {
+          const stream = webcamRef.current.video.srcObject as MediaStream;
+          stream.getTracks().forEach(track => track.stop());
+        }
+      };
     }, []);
 
     const handleUserMedia = () => {
+      console.log("Kamera berhasil diinisialisasi");
       setIsCameraReady(true);
       setCameraError(null);
     };
 
     const handleUserMediaError = (error: string | DOMException) => {
       console.error('Error accessing webcam:', error);
-      setCameraError('Tidak dapat mengakses kamera. Pastikan Anda telah memberikan izin.');
+      
+      let errorMessage = 'Tidak dapat mengakses kamera.';
+      
+      if (error instanceof DOMException) {
+        if (error.name === 'NotAllowedError') {
+          setPermissionDenied(true);
+          errorMessage = 'Izin kamera ditolak. Silakan berikan izin kamera melalui pengaturan browser Anda.';
+        } else if (error.name === 'NotFoundError') {
+          errorMessage = 'Tidak ada kamera yang terdeteksi pada perangkat Anda.';
+        } else if (error.name === 'NotReadableError') {
+          errorMessage = 'Kamera Anda mungkin sedang digunakan oleh aplikasi lain.';
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      setCameraError(errorMessage);
       setIsCameraReady(false);
     };
 
@@ -79,15 +137,43 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         }
         setIsCameraReady(false);
         setCameraError(null);
-        setTimeout(() => setIsCameraReady(true), 300);
+        setPermissionDenied(false);
+        
+        // Re-initialize camera
+        setIsInitializing(true);
+        setTimeout(() => {
+          setIsInitializing(false);
+        }, 500);
       }
     };
 
-    const videoConstraints = {
-      width: 1280,
-      height: 720,
-      deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+    const requestCameraPermission = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        setPermissionDenied(false);
+        setCameraError(null);
+        refreshCamera();
+      } catch (error) {
+        console.error('Error requesting camera permission:', error);
+        if (error instanceof DOMException && error.name === 'NotAllowedError') {
+          setCameraError('Izin kamera masih ditolak. Silakan ubah pengaturan izin di browser Anda.');
+        } else {
+          setCameraError(`Gagal mengakses kamera: ${error instanceof Error ? error.message : 'Error tidak diketahui'}`);
+        }
+      }
     };
+
+    const videoConstraints = selectedDeviceId 
+      ? {
+          width: 1280,
+          height: 720,
+          deviceId: { exact: selectedDeviceId }
+        }
+      : {
+          width: 1280,
+          height: 720,
+          facingMode: "user"
+        };
 
     return (
       <div className="rounded-lg overflow-hidden bg-slate-800 border border-slate-700">
@@ -99,10 +185,33 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         </div>
         
         <div className="camera-container relative">
-          {cameraError ? (
-            <div className="w-full h-full flex items-center justify-center bg-slate-800">
+          {permissionDenied ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 p-6">
+              <ShieldExclamationIcon className="h-16 w-16 text-red-500 mb-4" />
+              <p className="text-red-400 text-center mb-4">
+                Izin kamera ditolak. Anda perlu memberikan izin kamera untuk menggunakan fitur ini.
+              </p>
+              <div className="flex flex-col space-y-4">
+                <button 
+                  onClick={requestCameraPermission}
+                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-md text-white"
+                >
+                  Minta Izin Kamera
+                </button>
+                <a 
+                  href="https://support.google.com/chrome/answer/2693767?hl=id" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:underline text-center text-sm"
+                >
+                  Cara mengaktifkan izin kamera di browser
+                </a>
+              </div>
+            </div>
+          ) : cameraError ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 p-6">
               <div className="text-red-400 text-center p-4">
-                <p className="mb-2">{cameraError}</p>
+                <p className="mb-4">{cameraError}</p>
                 <button 
                   onClick={refreshCamera}
                   className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-md text-white"
@@ -111,7 +220,14 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
                 </button>
               </div>
             </div>
-          ) : isCameraReady ? (
+          ) : isInitializing ? (
+            <div className="w-full h-full flex items-center justify-center bg-slate-800">
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <div className="text-slate-400">Memuat kamera...</div>
+              </div>
+            </div>
+          ) : (
             <Webcam
               audio={false}
               ref={webcamRef}
@@ -121,11 +237,8 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
               onUserMediaError={handleUserMediaError}
               mirrored={isMirror}
               className="w-full h-full object-cover"
+              forceScreenshotSourceSize
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-slate-800">
-              <div className="text-slate-400">Memuat kamera...</div>
-            </div>
           )}
           
           {isScanning && (
@@ -139,11 +252,20 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
         
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex justify-between items-center">
           <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => setIsMirror(!isMirror)} 
+              className="text-sm text-white bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md"
+              disabled={!isCameraReady}
+            >
+              {isMirror ? 'Mirror: ON' : 'Mirror: OFF'}
+            </button>
+            
             {devices.length > 1 && (
               <select 
                 value={selectedDeviceId}
                 onChange={(e) => setSelectedDeviceId(e.target.value)}
                 className="bg-slate-700 text-white text-sm rounded-md px-3 py-2 border-none outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={!isCameraReady}
               >
                 {devices.map((device) => (
                   <option key={device.deviceId} value={device.deviceId}>
@@ -152,13 +274,6 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
                 ))}
               </select>
             )}
-            
-            <button 
-              onClick={() => setIsMirror(!isMirror)} 
-              className="text-sm text-white bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md"
-            >
-              {isMirror ? 'Mirror: ON' : 'Mirror: OFF'}
-            </button>
           </div>
           
           <div className="flex space-x-3">

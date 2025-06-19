@@ -1,14 +1,39 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import CameraPreview from './components/CameraPreview';
-import ThreatAnalysis, { AnalysisResult } from './components/ThreatAnalysis';
-import HistoryPanel from './components/HistoryPanel';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import Notification, { NotificationType } from './components/Notification';
 import { recognizeText, terminateOCR } from './services/ocrService';
 import { analyzeText } from './services/threatAnalysisService';
+import { AnalysisResult } from './components/ThreatAnalysis';
+
+// Import komponen dengan dynamic import untuk menghindari masalah SSR
+const CameraPreview = dynamic(() => import('./components/CameraPreview'), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-lg overflow-hidden bg-slate-800 border border-slate-700">
+      <div className="p-4 bg-slate-800 border-b border-slate-700 flex items-center">
+        <div className="flex items-center space-x-2">
+          <div className="h-6 w-6 bg-blue-400 rounded-full animate-pulse"></div>
+          <h2 className="text-xl font-semibold text-white">Camera Preview</h2>
+        </div>
+      </div>
+      <div className="camera-container flex items-center justify-center bg-slate-800">
+        <div className="text-slate-400">Memuat komponen kamera...</div>
+      </div>
+    </div>
+  )
+});
+
+const ThreatAnalysis = dynamic(() => import('./components/ThreatAnalysis'), {
+  ssr: false
+});
+
+const HistoryPanel = dynamic(() => import('./components/HistoryPanel'), {
+  ssr: false
+});
 
 export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
@@ -131,11 +156,13 @@ export default function Home() {
         <div className="container mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-              <CameraPreview 
-                onCapture={handleCapture} 
-                isScanning={isScanning} 
-                ref={cameraRef}
-              />
+              <Suspense fallback={<div>Loading camera...</div>}>
+                <CameraPreview 
+                  onCapture={handleCapture} 
+                  isScanning={isScanning} 
+                  ref={cameraRef}
+                />
+              </Suspense>
             </div>
             
             <div>
