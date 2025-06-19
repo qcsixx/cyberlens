@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { EyeIcon, LanguageIcon } from '@heroicons/react/24/outline';
+import { EyeIcon, CameraIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 
 interface HeaderProps {
   onToggleHistory: () => void;
+  onStartScanning: () => void;
 }
 
-export default function Header({ onToggleHistory }: HeaderProps) {
+export default function Header({ onToggleHistory, onStartScanning }: HeaderProps) {
   const [mounted, setMounted] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
   
@@ -51,9 +52,11 @@ export default function Header({ onToggleHistory }: HeaderProps) {
             </button>
             
             <button
+              onClick={onStartScanning}
               className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md flex items-center space-x-2 scan-button"
             >
-              <span>Start Scanning</span>
+              <CameraIcon className="h-5 w-5" />
+              <span>Scan Sekarang</span>
             </button>
           </div>
         </div>
