@@ -98,16 +98,44 @@ export default function Home() {
       const processedImage = await preprocessImageForOCR(imageSrc);
       console.log('Image preprocessed for OCR');
       
-      // Extract text using OCR
-      const extractedText = await recognizeText(processedImage);
-      console.log('Text extracted:', extractedText.substring(0, 100) + '...');
+      // Extract text using OCR with retry logic
+      let extractedText = '';
+      let ocrSuccess = false;
+      let ocrError = null;
       
-      if (!extractedText || extractedText.trim().length === 0) {
-        showNotification('error', 'Tidak ada teks yang terdeteksi dalam gambar. Coba ambil gambar yang lebih jelas.');
-        setIsScanning(false);
-        setIsAnalyzing(false);
-        return;
+      for (let attempt = 1; attempt <= APP_CONFIG.retryAttempts; attempt++) {
+        try {
+          console.log(`OCR attempt ${attempt}/${APP_CONFIG.retryAttempts}`);
+          extractedText = await recognizeText(processedImage);
+          
+          if (extractedText && extractedText.trim().length > 0) {
+            ocrSuccess = true;
+            break;
+          } else {
+            console.warn(`OCR attempt ${attempt} returned empty text`);
+            if (attempt < APP_CONFIG.retryAttempts) {
+              await new Promise(resolve => setTimeout(resolve, APP_CONFIG.retryDelay));
+            }
+          }
+        } catch (error) {
+          console.error(`OCR attempt ${attempt} failed:`, error);
+          ocrError = error;
+          
+          if (attempt < APP_CONFIG.retryAttempts) {
+            await new Promise(resolve => setTimeout(resolve, APP_CONFIG.retryDelay));
+          }
+        }
       }
+      
+      if (!ocrSuccess) {
+        if (ocrError) {
+          throw ocrError;
+        } else {
+          throw new Error('Tidak ada teks yang terdeteksi dalam gambar setelah beberapa kali percobaan. Coba ambil gambar yang lebih jelas.');
+        }
+      }
+      
+      console.log('Text extracted:', extractedText.substring(0, 100) + '...');
       
       // Analyze the extracted text
       const result = await analyzeText(extractedText);

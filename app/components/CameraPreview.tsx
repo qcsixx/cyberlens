@@ -23,21 +23,45 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     const [isMirror, setIsMirror] = useState(true);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [permissionDenied, setPermissionDenied] = useState(false);
+    const [retryCount, setRetryCount] = useState(0);
 
     // Inisialisasi kamera dan permintaan izin
     useEffect(() => {
       let mounted = true;
+      let timeoutId: NodeJS.Timeout | null = null;
 
       const initializeCamera = async () => {
         setIsInitializing(true);
+        
         try {
           // Cek apakah browser mendukung getUserMedia
           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             throw new Error('Browser Anda tidak mendukung akses kamera. Gunakan browser modern seperti Chrome, Firefox, atau Edge.');
           }
 
-          // Minta izin kamera terlebih dahulu
-          await navigator.mediaDevices.getUserMedia({ video: true });
+          // Minta izin kamera terlebih dahulu dengan timeout
+          const permissionPromise = navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: "user" 
+            } 
+          });
+          
+          // Set timeout untuk permintaan izin
+          const timeoutPromise = new Promise<MediaStream>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(new Error('Timeout requesting camera permission'));
+            }, 10000); // 10 detik timeout
+          });
+          
+          // Race antara permintaan izin dan timeout
+          await Promise.race([permissionPromise, timeoutPromise]);
+          
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
           
           // Dapatkan daftar perangkat kamera
           const devices = await navigator.mediaDevices.enumerateDevices();
@@ -48,16 +72,39 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
               throw new Error('Tidak ada kamera yang terdeteksi pada perangkat Anda.');
             }
             
+            // Pilih kamera belakang secara default jika tersedia
+            const backCamera = videoDevices.find(device => 
+              device.label.toLowerCase().includes('back') || 
+              device.label.toLowerCase().includes('belakang')
+            );
+            
             setDevices(videoDevices);
-            setSelectedDeviceId(videoDevices[0].deviceId);
+            setSelectedDeviceId(backCamera?.deviceId || videoDevices[0].deviceId);
             setPermissionDenied(false);
+            setRetryCount(0);
           }
         } catch (error) {
           console.error('Error initializing camera:', error);
+          
           if (mounted) {
             if (error instanceof DOMException && error.name === 'NotAllowedError') {
               setPermissionDenied(true);
               setCameraError('Izin kamera ditolak. Silakan berikan izin kamera melalui pengaturan browser Anda.');
+            } else if (error instanceof DOMException && error.name === 'NotReadableError') {
+              setCameraError('Kamera tidak dapat diakses. Mungkin sedang digunakan oleh aplikasi lain.');
+              
+              // Retry automatically after a delay
+              if (retryCount < 3) {
+                const newRetryCount = retryCount + 1;
+                setRetryCount(newRetryCount);
+                
+                setTimeout(() => {
+                  if (mounted) {
+                    console.log(`Auto-retrying camera initialization (attempt ${newRetryCount})...`);
+                    initializeCamera();
+                  }
+                }, 2000);
+              }
             } else {
               setCameraError(`Gagal mengakses kamera: ${error instanceof Error ? error.message : 'Error tidak diketahui'}`);
             }
@@ -73,13 +120,15 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
       return () => {
         mounted = false;
+        if (timeoutId) clearTimeout(timeoutId);
+        
         // Hentikan stream kamera saat komponen unmount
         if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.srcObject) {
           const stream = webcamRef.current.video.srcObject as MediaStream;
           stream.getTracks().forEach(track => track.stop());
         }
       };
-    }, []);
+    }, [retryCount]);
 
     const handleUserMedia = () => {
       console.log("Kamera berhasil diinisialisasi");
@@ -100,6 +149,17 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           errorMessage = 'Tidak ada kamera yang terdeteksi pada perangkat Anda.';
         } else if (error.name === 'NotReadableError') {
           errorMessage = 'Kamera Anda mungkin sedang digunakan oleh aplikasi lain.';
+          
+          // Auto retry for NotReadableError
+          if (retryCount < 3) {
+            const newRetryCount = retryCount + 1;
+            setRetryCount(newRetryCount);
+            
+            setTimeout(() => {
+              console.log(`Auto-retrying after NotReadableError (attempt ${newRetryCount})...`);
+              refreshCamera();
+            }, 2000);
+          }
         } else {
           errorMessage = `Error: ${error.message}`;
         }
@@ -112,15 +172,18 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
     };
 
     const captureImage = () => {
-      if (webcamRef.current) {
+      if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.readyState === 4) {
         const imageSrc = webcamRef.current.getScreenshot();
         if (imageSrc) {
+          console.log("Image captured successfully");
           onCapture(imageSrc);
         } else {
           console.error('Failed to capture image');
+          setCameraError('Gagal mengambil gambar. Silakan coba lagi.');
         }
       } else {
-        console.error('Webcam reference not available');
+        console.error('Webcam not ready for capture');
+        setCameraError('Kamera belum siap. Silakan tunggu sebentar dan coba lagi.');
       }
     };
 
@@ -165,13 +228,14 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
 
     const videoConstraints = selectedDeviceId 
       ? {
-          width: 1280,
-          height: 720,
-          deviceId: { exact: selectedDeviceId }
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          deviceId: { exact: selectedDeviceId },
+          facingMode: "user"
         }
       : {
-          width: 1280,
-          height: 720,
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
           facingMode: "user"
         };
 
@@ -184,7 +248,7 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
           </div>
         </div>
         
-        <div className="camera-container relative">
+        <div className="camera-container relative" style={{ height: '400px' }}>
           {permissionDenied ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 p-6">
               <ShieldExclamationIcon className="h-16 w-16 text-red-500 mb-4" />
@@ -238,6 +302,8 @@ const CameraPreview = forwardRef<CameraPreviewRef, CameraPreviewProps>(
               mirrored={isMirror}
               className="w-full h-full object-cover"
               forceScreenshotSourceSize
+              imageSmoothing
+              screenshotQuality={0.95}
             />
           )}
           
