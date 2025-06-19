@@ -7,6 +7,7 @@ import Footer from './components/Footer';
 import Notification, { NotificationType } from './components/Notification';
 import { recognizeText, terminateOCR } from './services/ocrService';
 import { analyzeText } from './services/threatAnalysisService';
+import { preprocessImageForOCR } from './utils/imageProcessing';
 import { AnalysisResult } from './components/ThreatAnalysis';
 
 // Import komponen dengan dynamic import untuk menghindari masalah SSR
@@ -93,8 +94,13 @@ export default function Home() {
       setIsScanning(true);
       setIsAnalyzing(true);
       
+      // Preprocess image to improve OCR accuracy
+      const processedImage = await preprocessImageForOCR(imageSrc);
+      console.log('Image preprocessed for OCR');
+      
       // Extract text using OCR
-      const extractedText = await recognizeText(imageSrc);
+      const extractedText = await recognizeText(processedImage);
+      console.log('Text extracted:', extractedText.substring(0, 100) + '...');
       
       if (!extractedText || extractedText.trim().length === 0) {
         showNotification('error', 'Tidak ada teks yang terdeteksi dalam gambar. Coba ambil gambar yang lebih jelas.');

@@ -1,8 +1,10 @@
-import { createWorker } from 'tesseract.js';
+import { createWorker, createScheduler } from 'tesseract.js';
+import { TESSERACT_CONFIG } from '../config';
 
 let worker: Tesseract.Worker | null = null;
+let scheduler: any = null;
 let isInitializing = false;
-let initPromise: Promise<Tesseract.Worker> | null = null;
+let initPromise: Promise<any> | null = null;
 
 export async function initializeOCR() {
   if (worker) {
@@ -20,18 +22,28 @@ export async function initializeOCR() {
     try {
       const timeoutId = setTimeout(() => {
         reject(new Error('Timeout initializing OCR engine'));
-      }, 30000); // 30 detik timeout
+      }, TESSERACT_CONFIG.timeouts.initialization);
       
-      const newWorker = await createWorker('ind');
-      await newWorker.load();
-      await newWorker.loadLanguage('ind');
-      await newWorker.initialize('ind');
+      // Gunakan scheduler untuk performa yang lebih baik
+      scheduler = createScheduler();
+      const newWorker = await createWorker();
+      
+      // Gabungkan bahasa untuk dukungan multi-bahasa
+      const languages = TESSERACT_CONFIG.languages.join('+');
+      await newWorker.loadLanguage(languages);
+      await newWorker.initialize(languages);
+      
+      // Konfigurasi tambahan untuk meningkatkan akurasi OCR
+      await newWorker.setParameters(TESSERACT_CONFIG.parameters);
+      
+      scheduler.addWorker(newWorker);
+      worker = newWorker;
       
       clearTimeout(timeoutId);
-      worker = newWorker;
       isInitializing = false;
-      resolve(worker);
+      resolve(scheduler);
     } catch (error) {
+      console.error('Error initializing OCR:', error);
       isInitializing = false;
       initPromise = null;
       reject(error);
@@ -43,19 +55,35 @@ export async function initializeOCR() {
 
 export async function recognizeText(imageData: string): Promise<string> {
   try {
+    console.log('Starting OCR process...');
+    
     // Buat promise dengan timeout
     const recognizePromise = new Promise<string>(async (resolve, reject) => {
       try {
         const timeoutId = setTimeout(() => {
           reject(new Error('Timeout during text recognition'));
-        }, 15000); // 15 detik timeout
+        }, TESSERACT_CONFIG.timeouts.recognition);
         
-        const ocrWorker = await initializeOCR();
-        const result = await ocrWorker.recognize(imageData);
+        // Initialize OCR if not already done
+        await initializeOCR();
         
-        clearTimeout(timeoutId);
-        resolve(result.data.text);
+        // Use worker directly for simplicity
+        if (worker) {
+          const result = await worker.recognize(imageData);
+          console.log('OCR result:', result.data.text.substring(0, 100) + '...');
+          
+          clearTimeout(timeoutId);
+          
+          if (!result.data.text || result.data.text.trim().length === 0) {
+            reject(new Error('Tidak ada teks yang terdeteksi dalam gambar'));
+          } else {
+            resolve(result.data.text);
+          }
+        } else {
+          reject(new Error('OCR worker tidak tersedia'));
+        }
       } catch (error) {
+        console.error('OCR recognition error:', error);
         reject(error);
       }
     });
@@ -68,6 +96,15 @@ export async function recognizeText(imageData: string): Promise<string> {
 }
 
 export async function terminateOCR() {
+  if (scheduler) {
+    try {
+      await scheduler.terminate();
+      scheduler = null;
+    } catch (error) {
+      console.error('Error terminating OCR scheduler:', error);
+    }
+  }
+  
   if (worker) {
     try {
       await worker.terminate();

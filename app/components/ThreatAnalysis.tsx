@@ -11,6 +11,7 @@ export interface AnalysisResult {
   confidence: number;
   threatType?: string;
   recommendations: string[];
+  analysis?: string;
   timestamp: string;
 }
 
@@ -63,7 +64,7 @@ export default function ThreatAnalysis({ analysisResult, isAnalyzing }: ThreatAn
     );
   }
 
-  const { threatLevel, confidence, recommendations, text, threatType } = analysisResult;
+  const { threatLevel, confidence, recommendations, text, threatType, analysis } = analysisResult;
 
   const getThreatColor = (level: ThreatLevel) => {
     switch (level) {
@@ -114,7 +115,7 @@ export default function ThreatAnalysis({ analysisResult, isAnalyzing }: ThreatAn
         </div>
       </div>
       
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-16rem)]">
         <div className={`p-4 rounded-lg border ${getThreatBgColor(threatLevel)} flex items-center justify-between`}>
           <div className="flex items-center space-x-3">
             {getThreatIcon(threatLevel)}
@@ -155,9 +156,9 @@ export default function ThreatAnalysis({ analysisResult, isAnalyzing }: ThreatAn
               Analysis Summary
             </h3>
             <p className="text-slate-300">
-              {threatLevel === 'safe' 
+              {analysis || (threatLevel === 'safe' 
                 ? 'Tidak terdeteksi risiko keamanan pada teks yang diekstrak.' 
-                : `Terdeteksi potensi ${threatType || 'ancaman'} pada teks yang diekstrak.`}
+                : `Terdeteksi potensi ${threatType || 'ancaman'} pada teks yang diekstrak.`)}
             </p>
           </div>
           
@@ -185,6 +186,17 @@ export default function ThreatAnalysis({ analysisResult, isAnalyzing }: ThreatAn
               ))}
             </ul>
           </div>
+
+          {threatType && (
+            <div>
+              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">
+                Threat Type
+              </h3>
+              <div className={`inline-block px-3 py-1 rounded-full text-sm ${getThreatColor(threatLevel)}`}>
+                {threatType}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
