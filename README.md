@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CyberLens - Aplikasi Deteksi Ancaman Keamanan
 
-## Getting Started
+CyberLens adalah aplikasi web modern untuk mendeteksi potensi ancaman keamanan dari teks yang diambil melalui kamera. Aplikasi ini menggunakan teknologi OCR (Optical Character Recognition) untuk mengekstrak teks dari gambar, kemudian menganalisisnya untuk mengidentifikasi potensi risiko keamanan seperti phishing, penipuan, atau konten berbahaya lainnya.
 
-First, run the development server:
+## Fitur Utama
+
+- 📷 **Akses Kamera Langsung**: Mengaktifkan kamera laptop secara otomatis (dengan izin pengguna)
+- 🔍 **OCR Terintegrasi**: Mengekstrak teks dari gambar menggunakan Tesseract.js
+- 🛡️ **Analisis Ancaman**: Menganalisis teks untuk mendeteksi potensi risiko keamanan
+- 📊 **Penilaian Risiko**: Menampilkan tingkat risiko (aman, waspada, bahaya) dengan tingkat kepercayaan
+- 💡 **Rekomendasi**: Memberikan saran tindakan berdasarkan hasil analisis
+- 🕒 **Riwayat Pemindaian**: Menyimpan dan menampilkan hasil pemindaian sebelumnya
+
+## Tech Stack
+
+- **Frontend**: Next.js 15 + TypeScript + Tailwind CSS
+- **OCR**: Tesseract.js
+- **Penyimpanan**: LocalStorage untuk menyimpan riwayat pemindaian
+- **UI/UX**: Desain responsif dengan tema biru-putih
+
+## Cara Menggunakan
+
+1. Buka aplikasi di browser
+2. Berikan izin akses kamera ketika diminta
+3. Arahkan kamera ke teks yang ingin dianalisis
+4. Klik tombol "Capture Now" untuk mengambil gambar
+5. Tunggu proses OCR dan analisis selesai
+6. Lihat hasil analisis dan rekomendasi tindakan
+7. Riwayat pemindaian akan tersimpan secara otomatis
+
+## Pengembangan Lokal
 
 ```bash
+# Clone repositori
+git clone https://github.com/username/cyberlens.git
+
+# Masuk ke direktori proyek
+cd cyberlens
+
+# Instal dependensi
+npm install
+
+# Jalankan server pengembangan
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka [http://localhost:3000](http://localhost:3000) di browser untuk melihat aplikasi.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Lisensi
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+MIT
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Dibuat dengan ❤️ oleh Tim Keamanan Siber
